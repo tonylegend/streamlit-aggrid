@@ -50,7 +50,7 @@ def __parse_row_data(data_parameter):
 
     if isinstance(data_parameter, pd.DataFrame):
         __cast_date_columns_to_iso8601(data_parameter) 
-        row_data = data_parameter.to_json(orient='records', date_format='iso')
+        row_data = data_parameter.to_json(orient='records', date_format='iso', default_handler=str)
         return row_data
 
     elif isinstance(data_parameter, str):
@@ -161,7 +161,7 @@ def AgGrid(
     use_legacy_selected_rows=False,
     key: typing.Any=None,
     update_on = [],
-    **default_column_parameters) -> typing.Dict:
+    **default_column_parameters) -> AgGridReturn:
     """Reders a DataFrame using AgGrid.
 
     Parameters
@@ -315,7 +315,11 @@ def AgGrid(
 
     if update_mode:
         update_on = list(update_on)
-        update_on.append(__parse_update_mode(update_mode))
+        if update_mode == GridUpdateMode.MANUAL:
+            manual_update=True
+        else:
+            manual_update=False
+            update_on.extend(__parse_update_mode(update_mode))
 
     frame_dtypes = []
     if try_to_convert_back_to_original_types:
@@ -354,6 +358,7 @@ def AgGrid(
             theme=theme,
             custom_css=custom_css,
             update_on=update_on,
+            manual_update=manual_update,
             key=key
             )
 
@@ -382,7 +387,12 @@ def AgGrid(
 
                 date_columns = [k for k,v in original_types.items() if v == "M"]
                 if date_columns:
-                    frame.loc[:,date_columns] = frame.loc[:,date_columns].apply(pd.to_datetime, errors=conversion_errors)
+                    with warnings.catch_warnings():
+                        warnings.filterwarnings('ignore', category=FutureWarning, message=(
+                            ".*will attempt to set the values inplace instead of always setting a new array. "
+                            "To retain the old behavior, use either.*"
+                        ))
+                        frame.loc[:,date_columns] = frame.loc[:,date_columns].apply(pd.to_datetime, errors=conversion_errors)
 
                 timedelta_columns = [k for k,v in original_types.items() if v == "m"]
                 if timedelta_columns:
